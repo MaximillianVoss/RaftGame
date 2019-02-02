@@ -1,61 +1,43 @@
 import sys, os, pygame, random
+import time
+from enum import Enum
 
 
 def GetRootPath():
     return os.path.dirname(os.path.abspath(__file__))[:-len("Sources")]
 
 
-# Функция отображения картинок
-def loadImage(name, colorkey=None):
-    # Добавляем к имени картинки имя папки
-    fullname = GetRootPath() + "Resources\\" + name
-    # Загружаем картинку
-    image = pygame.image.load(fullname)
-    image = image.convert()
-    # Если второй параметр =-1 делаем прозрачным
-    # цвет из точки 0,0
-    if colorkey is not None:
-        if colorkey is -1:
-            colorkey = image.get_at((0, 0))
-        image.set_colorkey(colorkey, pygame.RLEACCEL)
-    return image
+class Direction(Enum):
+    Up = 1
+    Down = 2
+    Left = 3
+    Right = 4
+    NoDirection = 5
 
 
-def checkCollision(sprite1, sprite2):
-    return pygame.sprite.collide_rect(sprite1, sprite2)
-
-
-class Background(pygame.sprite.Sprite):
-    def __init__(self, imgFileName, location):
-        pygame.sprite.Sprite.__init__(self)
-        # self.image = pygame.image.load(loadImage(image_file))
+class BaseSprite(pygame.sprite.Sprite):
+    def __init__(self, location, imgFileNames):
+        super(BaseSprite, self, ).__init__()
+        # анимаия
+        self.index = 0
         self.images = []
-        self.images.append(loadImage(imgFileName))
-        self.image = self.images[0]
+        for i in range(0, len(imgFileNames)):
+            self.images.append(self.loadImage(imgFileNames[i]))
+        self.image = self.images[self.index]
         self.rect = self.image.get_rect()
         self.rect.left, self.rect.top = location
-
-
-class Player(pygame.sprite.Sprite):
-    def __init__(self):
-        super(Player, self).__init__()
-        self.images = []
-        # анимаия
-        self.images.append(loadImage('1.png'))
-        self.images.append(loadImage('2.png'))
-        # размер изображений 50х50
-        self.index = 0
-        self.image = self.images[self.index]
-        self.rect = pygame.Rect(5, 5, 50, 50)
-        self.health = 100
-        self.wood = 0
-        self.stone = 0
+        self.direction = 1
 
     def update(self):
         self.index += 1
         if self.index >= len(self.images):
             self.index = 0
         self.image = self.images[self.index]
+        self.image.set_colorkey((255, 255, 255))
+
+    def setCoords(self, x, y):
+        self.rect.x = x
+        self.rect.y = y
 
     def moveRight(self, pixels):
         self.rect.x += pixels
@@ -69,19 +51,67 @@ class Player(pygame.sprite.Sprite):
     def modeDown(self, pixels):
         self.rect.y += pixels
 
+    # Функция отображения картинок
+    def loadImage(selft, name, colorkey=None):
+        # Добавляем к имени картинки имя папки
+        fullname = GetRootPath() + "Resources\\" + name
+        # Загружаем картинку
+        image = pygame.image.load(fullname).convert_alpha()
+        return image
 
-class Shark(pygame.sprite.Sprite):
-    def __init__(self, location):
-        super(Shark, self, ).__init__()
-        self.images = []
-        # анимаия
-        self.images.append(loadImage('Shark1.png'))
-        self.images.append(loadImage('Shark2.png'))
-        # размер изображений 50х50
-        self.index = 0
+    def checkCollision(self, sprite):
+        return pygame.sprite.collide_rect(self, sprite)
+
+    def getCollisionDirection(self, sprite):
+        rect1 = self.image.get_rect()
+        rect2 = sprite.image.get_rect()
+        if rect1.midtop[1] > rect2.midtop[1]:
+            return Direction.Up
+        elif rect1.midleft[0] > rect2.midleft[0]:
+            return Direction.Left
+        elif rect1.midright[0] < rect2.midright[0]:
+            return Direction.Right
+        else:
+            return Direction.Down
+
+
+class Background(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Background, self).__init__(location, imgFileNames)
+
+
+class Player(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Player, self).__init__(location, imgFileNames)
+        self.health = 100
+        self.wood = 0
+        self.stone = 0
+        self.stand = False;
+
+    def update(self):
+        self.index += 1
+        if self.index >= len(self.images):
+            self.index = 0
         self.image = self.images[self.index]
-        self.rect = self.image.get_rect()
-        self.rect.left, self.rect.top = location
+        if not self.stand:
+            self.modeDown(2)
+
+    def drawStatus(self, screen):
+        font = pygame.font.Font("freesansbold.ttf", 25)
+        placeholder = [10, 10]
+        titles = [("Здоровье:", self.health), ("Дерево:", self.wood), ("Камень:", self.stone)]
+        for i in range(0, titles.__len__()):
+            title = font.render(titles[i][0] + str(titles[i][1]), True, (255, 255, 255))
+            screen.blit(title, placeholder)
+            placeholder[1] += 30
+        pygame.display.update()
+        clock = pygame.time.Clock()
+        clock.tick(60)
+
+
+class Shark(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Shark, self).__init__(location, imgFileNames)
         self.direction = 1
 
     def update(self):
@@ -92,99 +122,39 @@ class Shark(pygame.sprite.Sprite):
         if self.index >= len(self.images):
             self.index = 0
         self.image = self.images[self.index]
-
-    def moveRight(self, pixels):
-        self.rect.x += pixels
-
-    def moveLeft(self, pixels):
-        self.rect.x -= pixels
-
-    def moveUp(self, pixels):
-        self.rect.y -= pixels
-
-    def modeDown(self, pixels):
-        self.rect.y += pixels
+        self.image.set_colorkey((255, 255, 255))
 
 
-class Wood(pygame.sprite.Sprite):
-    def __init__(self, location):
-        super(Wood, self).__init__()
-        self.images = []
-        # анимаия
-        self.images.append(loadImage('wood.png'))
-        # размер изображений 50х50
-        self.index = 0
-        self.image = self.images[self.index]
-        self.rect = pygame.Rect(5, 5, 50, 50)
-        self.rect.left, self.rect.top = location
+class Raft(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Raft, self).__init__(location, imgFileNames)
 
     def update(self):
-        self.index += 1
         if self.index >= len(self.images):
             self.index = 0
         self.image = self.images[self.index]
 
 
-class Stone(pygame.sprite.Sprite):
-    def __init__(self, location):
-        super(Stone, self).__init__()
-        self.images = []
-        # анимаия
-        self.images.append(loadImage('stone.png'))
-        # размер изображений 50х50
-        self.index = 0
-        self.image = self.images[self.index]
-        self.rect = pygame.Rect(5, 5, 50, 50)
-        self.rect.left, self.rect.top = location
-
-    def update(self):
-        self.index += 1
-        if self.index >= len(self.images):
-            self.index = 0
-        self.image = self.images[self.index]
+class Wood(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Wood, self).__init__(location, imgFileNames)
 
 
-class Text(pygame.sprite.Sprite):
-    def __init__(self, text, size, color, width, height):
-        # Call the parent class (Sprite) constructor
-        pygame.sprite.Sprite.__init__(self)
-        self.font = pygame.font.Font("freesansbold.ttf", size)
-        self.textSurf = self.font.render(text, 1, color)
-        self.image = pygame.Surface((width, height))
-        self.drawText(text, size, color, width, height)
-        self.rect = pygame.Rect(5, 5, width, height)
+class Stone(BaseSprite):
+    def __init__(self, location, imgFileNames):
+        super(Stone, self).__init__(location, imgFileNames)
 
-    def drawText(self, text, size, color, width, height):
-        W = self.textSurf.get_width()
-        H = self.textSurf.get_height()
-        self.image.blit(self.textSurf, [width / 2 - W / 2, height / 2 - H / 2])
-
-    def update(self, text=""):
-        self.drawText(text, self.size, self.color, self.width, self.height)
-
-
-def drawStatus(player, screen):
-    font = pygame.font.Font("freesansbold.ttf", 25)
-    healthTitle = font.render("Здоровье: " + str(player.health), True, (255, 255, 255))
-    woodTitle = font.render("Дерево: " + str(player.wood), True, (255, 255, 255))
-    stoneTitle = font.render("Камень: " + str(player.stone), True, (255, 255, 255))
-    screen.blit(healthTitle, [10, 10])
-    screen.blit(woodTitle, [10, 40])
-    screen.blit(stoneTitle, [10, 70])
-    pygame.display.update()
-    clock = pygame.time.Clock()
-    clock.tick(60)
 
 def main():
     pygame.init()
     screen = pygame.display.set_mode((500, 500))
-    player = Player()
-    shark = Shark([0, 300])
-    stone = Stone([100, 400])
-    wood = Wood([300, 400])
-    healthTitle = Text(str(player.health), 25, (0, 0, 0), 100, 100)
-    background = Background('background_image.png', [0, 0])
-    my_group = pygame.sprite.Group(background, player, shark, stone, wood)
+    player = Player([250, 250], ["1.png"])
+    shark = Shark([0, 300], ["Shark1.png", "Shark2.png"])
+    stone = Stone([100, 400], ["Stone.png"])
+    wood = Wood([300, 400], ["Wood.png"])
+    raft = Raft([200, 125], ["Raft1.png"])
+    background = Background([0, 0], ["background_image.png"])
+    my_group = pygame.sprite.Group(background, player, shark, stone, wood, raft)
 
     while True:
         event = pygame.event.poll()
@@ -193,8 +163,10 @@ def main():
             sys.exit(0)
 
         carryOn = True
+        stoneCollected = False
+        woodCollected = False
         clock = pygame.time.Clock()
-
+        timerSeconds = 0
         while carryOn:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -213,14 +185,24 @@ def main():
                 player.moveUp(5)
             if keys[pygame.K_DOWN]:
                 player.modeDown(5)
-
-            if checkCollision(player, shark):
+            if player.checkCollision(shark):
                 player.health -= 1
-            if checkCollision(player, stone):
+            if player.checkCollision(stone):
                 player.stone += 1
-            if checkCollision(player, wood):
+                stoneCollected = True
+                stone.moveRight(500)
+            if player.checkCollision(wood):
                 player.wood += 1
-            drawStatus(player, screen)
+                woodCollected = True
+                wood.moveRight(500)
+            player.drawStatus(screen)
+
+            if stoneCollected == True and timerSeconds % 300 == 0:
+                stoneCollected = False
+                stone.setCoords(random.randint(50, 500), 400)
+            if woodCollected == True and timerSeconds % 300 == 0:
+                woodCollected = False
+                wood.setCoords(random.randint(50, 500), 400)
             # обновление спрайтов
             my_group.update()
             # отрисовка спрайтов
@@ -229,7 +211,7 @@ def main():
             pygame.display.flip()
             # число кадров в сек.
             clock.tick(60)
-
+            timerSeconds += 1
         pygame.quit()
 
 
