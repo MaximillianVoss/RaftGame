@@ -1,3 +1,5 @@
+import datetime
+import math
 import sys, os, pygame, random
 import time
 from enum import Enum
@@ -157,12 +159,26 @@ class Stone(BaseSprite):
         super(Stone, self).__init__(location, imgFileNames)
 
 
+class Text(pygame.sprite.Sprite):
+    def __init__(self, text, size, color, width, height):
+        pygame.sprite.Sprite.__init__(self)
+        self.font = pygame.font.Font("freesansbold.ttf", size)
+        self.textSurf = self.font.render(text, True, (255, 255, 255))
+        self.image = pygame.Surface((width, height))
+        W = self.textSurf.get_width()
+        H = self.textSurf.get_height()
+        self.image.blit(self.textSurf, [width / 2 - W / 2, height / 2 - H / 2])
+        self.rect = self.image.get_rect()
+        self.image.set_colorkey((255, 255, 255))
+
+
 class BaseScene:
 
     def __init__(self):
         self.started = False
         # число кадров в сек.
         self.FPS = 60
+        self.DEBUG = False
         self.seconds = 0
         self.clock = pygame.time.Clock()
         self.levelConstants = LevelConstans()
@@ -181,8 +197,8 @@ class BaseScene:
             if not self.paused:
                 ticks += 1
                 self.clock.tick(self.FPS)
-                self.seconds += ticks % self.FPS
-                # обновление спрайтовp
+                self.seconds += (ticks % self.FPS) / 1000
+                # обновление спрайтов
                 self.myGroup.update()
                 # отрисовка спрайтов
                 self.myGroup.draw(self.screen)
@@ -228,6 +244,10 @@ class GameScene(BaseScene):
         self.shark = Shark([0, 250], ["Shark1.png", "Shark2.png"])
         self.stone = Stone([100, self.levelConstants.Bottom], ["Stone.png"])
         self.wood = Wood([300, self.levelConstants.Bottom], ["Wood.png"])
+        self.stoneCollected = False
+        self.woodCollected = False
+        self.stage = 0
+        self.stages = [[1, 1], [2, 2]]
         self.myGroup = pygame.sprite.Group(
             self.sky,
             self.water,
@@ -252,6 +272,10 @@ class GameScene(BaseScene):
                     self.paused = not self.paused
         if not self.paused:
             keys = pygame.key.get_pressed()
+            if keys[pygame.K_ESCAPE]:
+                self.started = False
+                menuScene = Menu()
+                menuScene.start()
             if keys[pygame.K_LEFT]:
                 self.player.moveLeft(5)
             if keys[pygame.K_RIGHT]:
@@ -260,28 +284,41 @@ class GameScene(BaseScene):
                 self.player.moveUp(5)
             if keys[pygame.K_DOWN]:
                 self.player.modeDown(5)
+            if keys[pygame.K_u]:
+                if self.player.wood >= self.stages[self.stage][0] and self.player.stone >= self.stages[self.stage][1]:
+                    self.player.wood -= self.stages[self.stage][0]
+                    self.player.stone -= self.stages[self.stage][1]
+                    self.stage += 1
+                    self.myGroup.remove([self.raft])
+                    self.raft = Raft([200, self.levelConstants.Water - 50], ["Raft" + str(self.stage + 1) + ".png"])
+                    self.myGroup.add(self.raft)
+
             if self.player.checkCollision(self.shark):
                 self.player.health -= 1
 
             self.player.swimming = self.player.checkCollision(self.water)
             self.player.stand = self.player.checkCollision(self.raft) or self.player.checkCollision(self.sand)
-            stoneCollected = False
-            woodCollected = False
+
             if self.player.checkCollision(self.stone):
                 self.player.stone += 1
-                stoneCollected = True
+                self.stoneCollected = True
                 self.stone.moveRight(500)
             if self.player.checkCollision(self.wood):
                 self.player.wood += 1
-                woodCollected = True
+                self.woodCollected = True
                 self.wood.moveRight(500)
             self.player.drawStatus(self.screen)
+            if self.stage == 2:
+                self.started = False
+                success = Success(self.seconds)
+                success.start()
+            print(math.floor(self.seconds))
 
-            if stoneCollected == True and self.seconds % 3 == 0:
-                stoneCollected = False
+            if self.stoneCollected == True and math.floor(self.seconds) % 3 == 0:
+                self.stoneCollected = False
                 self.stone.setCoords(random.randint(50, 500), 400)
-            if woodCollected == True and self.seconds % 3 == 0:
-                woodCollected = False
+            if self.woodCollected == True and math.floor(self.seconds) % 3 == 0:
+                self.woodCollected = False
                 self.wood.setCoords(random.randint(50, 500), 400)
 
             if self.player.health == 0:
@@ -293,8 +330,12 @@ class GameScene(BaseScene):
 class GameOver(BaseScene):
     def __init__(self):
         super(GameOver, self).__init__()
-        self.over = BaseSprite([0, 0], ["GameOver.png"])
-        self.myGroup = pygame.sprite.Group(self.over)
+        self.background = BaseSprite([0, 0], ["GameOver.png"])
+        self.tryAgain = BaseSprite([50, 300], ["TryAgainBtn.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.background,
+            self.tryAgain
+        )
 
     def main(self):
         for event in pygame.event.get():
@@ -304,7 +345,44 @@ class GameOver(BaseScene):
                 if event.key == pygame.K_ESCAPE:
                     # выохд во ESCAPE
                     self.started = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                if self.tryAgain.rect.collidepoint(pos):
+                    self.started = False
+                    gameScene = GameScene()
+                    gameScene.start()
         pygame.display.flip()
+
+
+class Success(BaseScene):
+    def __init__(self, score):
+        super(Success, self).__init__()
+        self.score = score
+        self.background = BaseSprite([0, 0], ["Success.png"])
+        self.tryAgain = BaseSprite([50, 300], ["TryAgainBtn.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.background,
+            self.tryAgain
+        )
+
+    def main(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.started = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    # выохд во ESCAPE
+                    self.started = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                if self.tryAgain.rect.collidepoint(pos):
+                    self.started = False
+                    with open("table.txt", "a") as myfile:
+                        myfile.write(str(datetime.datetime.now()) + " " + str(self.score) + "\n")
+                    gameScene = GameScene()
+                    gameScene.start()
+        pygame.display.flip()
+
 
 if __name__ == '__main__':
     pygame.mixer.init()
