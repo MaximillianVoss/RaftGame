@@ -119,8 +119,8 @@ class Player(BaseSprite):
             screen.blit(title, placeholder)
             placeholder[1] += 30
         pygame.display.update()
-        clock = pygame.time.Clock()
-        clock.tick(60)
+        #clock = pygame.time.Clock()
+        #clock.tick(60)
 
 
 class Shark(BaseSprite):
