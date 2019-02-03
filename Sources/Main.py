@@ -304,7 +304,7 @@ class GameOver(BaseScene):
                 if event.key == pygame.K_ESCAPE:
                     # выохд во ESCAPE
                     self.started = False
-
+        pygame.display.flip()
 
 if __name__ == '__main__':
     pygame.mixer.init()
