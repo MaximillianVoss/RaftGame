@@ -30,8 +30,10 @@ class BaseSprite(pygame.sprite.Sprite):
         self.images = []
         for i in range(0, len(imgFileNames)):
             self.images.append(self.loadImage(imgFileNames[i]))
-        self.image = self.images[self.index]
+        if self.images.__len__() > 0:
+            self.image = self.images[self.index]
         self.rect = self.image.get_rect()
+        self.location = location
         self.rect.left, self.rect.top = location
         self.direction = 1
 
@@ -90,6 +92,16 @@ class Background(BaseSprite):
         super(Background, self).__init__(location, imgFileNames)
 
 
+class Label(BaseSprite):
+    def __init__(self, title, size, location):
+        font = pygame.font.Font("SegoeUI.ttf", size)
+        text = font.render(title, True, (255, 255, 255))
+        self.image = text
+        self.rect = self.image.get_rect()
+        super(Label, self).__init__(location, [])
+        self.images = [self.image]
+
+
 class Player(BaseSprite):
     def __init__(self, location, imgFileNames):
         super(Player, self).__init__(location, imgFileNames)
@@ -110,17 +122,12 @@ class Player(BaseSprite):
             self.moveUp(1)
 
     def drawStatus(self, screen):
-        font = pygame.font.Font("freesansbold.ttf", 25)
         placeholder = [10, 10]
         titles = [("Здоровье:", self.health), ("Дерево:", self.wood), ("Камень:", self.stone), ("Stand:", self.stand),
                   ("Swim:", self.swimming)]
-        for i in range(0, titles.__len__()):
-            title = font.render(titles[i][0] + str(titles[i][1]), True, (255, 255, 255))
-            screen.blit(title, placeholder)
-            placeholder[1] += 30
-        pygame.display.update()
-        #clock = pygame.time.Clock()
-        #clock.tick(60)
+        # for i in range(0, titles.__len__()):
+        #     Label(screen, titles[i][0] + str(titles[i][1]), 25, placeholder)
+        #     placeholder[1] += 30
 
 
 class Shark(BaseSprite):
@@ -157,19 +164,6 @@ class Wood(BaseSprite):
 class Stone(BaseSprite):
     def __init__(self, location, imgFileNames):
         super(Stone, self).__init__(location, imgFileNames)
-
-
-class Text(pygame.sprite.Sprite):
-    def __init__(self, text, size, color, width, height):
-        pygame.sprite.Sprite.__init__(self)
-        self.font = pygame.font.Font("freesansbold.ttf", size)
-        self.textSurf = self.font.render(text, True, (255, 255, 255))
-        self.image = pygame.Surface((width, height))
-        W = self.textSurf.get_width()
-        H = self.textSurf.get_height()
-        self.image.blit(self.textSurf, [width / 2 - W / 2, height / 2 - H / 2])
-        self.rect = self.image.get_rect()
-        self.image.set_colorkey((255, 255, 255))
 
 
 class BaseScene:
@@ -230,6 +224,10 @@ class Menu(BaseScene):
                     self.started = False
                     gameScene = GameScene()
                     gameScene.start()
+                if self.table.rect.collidepoint(pos):
+                    self.started = False
+                    table = Table()
+                    table.start()
         pygame.display.flip()
 
 
@@ -244,10 +242,22 @@ class GameScene(BaseScene):
         self.shark = Shark([0, 250], ["Shark1.png", "Shark2.png"])
         self.stone = Stone([100, self.levelConstants.Bottom], ["Stone.png"])
         self.wood = Wood([300, self.levelConstants.Bottom], ["Wood.png"])
+        self.labelWood1 = Label("Бревна, нужны", 12, [350, 350])
+        self.labelWood2 = Label("для апгрейда корабля", 12, [350, 370])
+        self.labelWood3 = Label("собирайте их!", 12, [350, 390])
+        self.labelStone1 = Label("Камни тоже!", 12, [50, 390])
+        self.labelControls1 = Label("Нажните P для паузы", 12, [170, 10])
+        self.labelControls2 = Label("Нажните U для апгрейда корабля", 12, [170, 30])
+        self.labelControls3 = Label("Нажните Esc для возврата в меню", 12, [170, 50])
+
+        self.labelWarning1 = Label("", 12, [170, 70])
+
+        self.labelsPlayer = []
+
         self.stoneCollected = False
         self.woodCollected = False
         self.stage = 0
-        self.stages = [[1, 1], [2, 2]]
+        self.stages = [[10, 10], [20, 20]]
         self.myGroup = pygame.sprite.Group(
             self.sky,
             self.water,
@@ -256,7 +266,15 @@ class GameScene(BaseScene):
             self.shark,
             self.stone,
             self.wood,
-            self.raft
+            self.raft,
+            self.labelWood1,
+            self.labelWood2,
+            self.labelWood3,
+            self.labelStone1,
+            self.labelControls1,
+            self.labelControls2,
+            self.labelControls3
+
         )
 
     def main(self):
@@ -292,6 +310,15 @@ class GameScene(BaseScene):
                     self.myGroup.remove([self.raft])
                     self.raft = Raft([200, self.levelConstants.Water - 50], ["Raft" + str(self.stage + 1) + ".png"])
                     self.myGroup.add(self.raft)
+                else:
+                    if self.player.wood < self.stages[self.stage][0] or \
+                            self.player.stone < self.stages[self.stage][1]:
+                        self.myGroup.remove(self.labelWarning1)
+                        self.labelWarning1 = Label(
+                            "Не хватает дерева:{0} камня:{1}".format(self.stages[self.stage][0] - self.player.wood,
+                                                                     self.stages[self.stage][1] - self.player.stone),
+                            12, self.labelWarning1.location)
+                        self.myGroup.add(self.labelWarning1)
 
             if self.player.checkCollision(self.shark):
                 self.player.health -= 1
@@ -307,12 +334,32 @@ class GameScene(BaseScene):
                 self.player.wood += 1
                 self.woodCollected = True
                 self.wood.moveRight(500)
-            self.player.drawStatus(self.screen)
+
+            placeholder = [10, 10]
+            titles = [("Здоровье:", self.player.health), ("Дерево:", self.player.wood), ("Камень:", self.player.stone)]
+            for i in range(0, self.labelsPlayer.__len__()):
+                self.myGroup.remove(self.labelsPlayer[i])
+            for i in range(0, titles.__len__()):
+                label = Label(titles[i][0] + str(titles[i][1]), 20, placeholder)
+                placeholder[1] += 30
+                self.labelsPlayer.append(label)
+                self.myGroup.add(label)
+
             if self.stage == 2:
                 self.started = False
                 success = Success(self.seconds)
                 success.start()
-            print(math.floor(self.seconds))
+            self.player.drawStatus(self.screen)
+
+            if self.seconds > 5:
+                self.myGroup.remove(self.labelWood1)
+                self.myGroup.remove(self.labelWood2)
+                self.myGroup.remove(self.labelWood3)
+                self.myGroup.remove(self.labelStone1)
+
+            if math.floor(self.seconds) % 2 == 0:
+                self.myGroup.remove(self.labelWarning1)
+            # print(math.floor(self.seconds))
 
             if self.stoneCollected == True and math.floor(self.seconds) % 3 == 0:
                 self.stoneCollected = False
@@ -360,9 +407,11 @@ class Success(BaseScene):
         self.score = score
         self.background = BaseSprite([0, 0], ["Success.png"])
         self.tryAgain = BaseSprite([50, 300], ["TryAgainBtn.png"])
+        self.labelScore = Label("{0:.2f} секунд".format(score), 25, [200, 200])
         self.myGroup = pygame.sprite.Group(
             self.background,
-            self.tryAgain
+            self.tryAgain,
+            self.labelScore
         )
 
     def main(self):
@@ -378,9 +427,39 @@ class Success(BaseScene):
                 if self.tryAgain.rect.collidepoint(pos):
                     self.started = False
                     with open("table.txt", "a") as myfile:
-                        myfile.write(str(datetime.datetime.now()) + " " + str(self.score) + "\n")
+                        now = datetime.datetime.now()
+                        myfile.write(
+                            "дата:{0}.{1}.{2} счет(секунды):{3:.2f}\n".format(now.day, now.month, now.year, self.score))
                     gameScene = GameScene()
                     gameScene.start()
+        pygame.display.flip()
+
+
+class Table(BaseScene):
+    def __init__(self):
+        super(Table, self).__init__()
+        self.background = BaseSprite([0, 0], ["Table.png"])
+        self.back = BaseSprite([50, 400], ["BackToMenuBtn.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.background,
+            self.back
+        )
+
+    def main(self):
+        with open("table.txt") as f:
+            content = f.readlines()
+        placeholder = [30, 150]
+        for i in range(0, content.__len__()):
+            self.myGroup.add(Label(content[i], 20, placeholder))
+            placeholder[1] += 20
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.started = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                if self.back.rect.collidepoint(pos):
+                    self.started = False
+                    Menu().start()
         pygame.display.flip()
 
 
